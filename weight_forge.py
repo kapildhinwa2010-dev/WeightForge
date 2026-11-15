@@ -145,7 +145,8 @@ class WeightForge(nn.Module):
             W = W * 0.01  # Small initial scale
         elif self.distribution == "uniform":
             W = W * 0.1  # Small initial scale
-        # fourier already handled in generation
+        # 'fourier' applies no extra scaling: weights come directly from
+        # the coordinate network output (default xavier-style init).
         return W
     
     def forge_weight(
