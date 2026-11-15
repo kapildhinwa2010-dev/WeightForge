@@ -207,30 +207,20 @@ class WeightForge(nn.Module):
         device: torch.device
     ) -> torch.Tensor:
         """Generate weight matrix with chunked processing"""
-        W = torch.zeros(out_dim, in_dim, device=device)
-        
-        # Calculate chunk sizes
-        chunk_elements = min(self.chunk_size, out_dim * in_dim)
-        chunk_rows = int(np.sqrt(chunk_elements))
-        chunk_rows = min(chunk_rows, out_dim)
-        
-        # Process in chunks
-        for i_start in range(0, out_dim, chunk_rows):
-            i_end = min(i_start + chunk_rows, out_dim)
-            
-            for j_start in range(0, in_dim, chunk_rows):
-                j_end = min(j_start + chunk_rows, in_dim)
-                
-                # Generate chunk
-                chunk = self._forge_weight_unchunked(
-                    i_end - i_start,
-                    j_end - j_start,
-                    device
-                )
-                
-                W[i_start:i_end, j_start:j_end] = chunk
-        
-        return W
+        row_values = torch.linspace(-1, 1, out_dim, device=device)
+        col_values = torch.linspace(-1, 1, in_dim, device=device)
+        outputs = []
+        total = out_dim * in_dim
+
+        for start in range(0, total, self.chunk_size):
+            flat = torch.arange(start, min(start + self.chunk_size, total), device=device)
+            rows = torch.div(flat, in_dim, rounding_mode="floor")
+            cols = flat.remainder(in_dim)
+            coords = torch.stack((row_values[rows], col_values[cols]), dim=1)
+            outputs.append(self.net(coords).squeeze(-1))
+
+        raw_weights = torch.cat(outputs).reshape(out_dim, in_dim)
+        return self._apply_distribution(raw_weights, out_dim, in_dim)
     
     def forge_layer(
         self,
