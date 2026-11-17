@@ -1,64 +1,47 @@
 # WeightForge
 
-[![CI](https://github.com/kapildhinwa2010-dev/WeightForge/actions/workflows/ci.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/WeightForge/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/kapildhinwa2010-dev/WeightForge/actions/workflows/codeql.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/WeightForge/actions/workflows/codeql.yml)
+WeightForge is a small Python/PyTorch prototype that maps normalized matrix coordinates to scalar values with a multilayer perceptron. Its functions return generated tensors; the repository does not demonstrate trained-weight reconstruction or a validated model-compression method. The project metadata labels the release `1.0.0` and classifies its development status as Beta.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
+## Implemented functionality
 
-Coordinate-based weight generator with selectable output distributions (Fourier, Xavier, Kaiming, Normal, Uniform).
+- `WeightForge.forge_weight(out_dim, in_dim)` generates a tensor of shape `(out_dim, in_dim)` from row/column coordinates. It processes large outputs in chunks according to `chunk_size`.
+- The coordinate network supports `silu`, `relu`, `gelu`, `tanh`, `sigmoid`, `elu`, and `leaky_relu` activations.
+- `forge_layer()` generates a dictionary of tensors from named `(out_dim, in_dim)` shapes. `forge_model()` inspects a PyTorch module and returns generated tensors for its `nn.Linear` weights and biases; it does not assign them to the supplied model.
+- `WeightForgeWrapper`, `WeightForgeConfig`, and `create_weight_forge()` provide convenience configuration and construction APIs.
+- `count_parameters()` counts parameters in the coordinate network. `compression_ratio()` reports the arithmetic ratio of a supplied parameter count to that count; it does not measure compressed storage.
 
-## What it does
+## Requirements and use from a checkout
 
-WeightForge maps 2D coordinates through a configurable MLP (default 5
-layers, 256 wide) to scalar weight values, then applies a distribution
-mode: Fourier features, Xavier/Glorot, Kaiming/He, Normal, or Uniform.
-Its role in the family is initialization-style generation - matrices
-with sensible init statistics, not reconstructions of trained weights.
+The project metadata requires Python 3.10 or newer, PyTorch 2.0 or newer, and NumPy 1.24 or newer. From the repository root, install the declared requirements:
 
-## Installation
+```bash
+python -m pip install -r requirements.txt
+```
 
-    pip install torch numpy pytest
+Then use the module from the checkout:
 
-## Usage
+```python
+from weight_forge import create_weight_forge
 
-    from weight_forge import create_weight_forge
+forge = create_weight_forge(hidden_size=64, num_layers=3, chunk_size=1024)
+weights = forge.forge_weight(out_dim=8, in_dim=4)
+print(weights.shape)  # torch.Size([8, 4])
+```
 
-    forge = create_weight_forge(hidden_size=256, num_layers=5)
-    W = forge.forge_weight(1000, 1000)
+The source file also has a demonstration entry point that can be run from the repository root with `python weight_forge.py`.
 
-    forge_k = create_weight_forge(distribution="kaiming")
-    Wk = forge_k.forge_weight(100, 100)
+**Packaging caveat:** At the reviewed commit, building a wheel with `python -m pip wheel --no-deps --no-build-isolation .` produced a wheel containing distribution metadata and the license, but not `weight_forge.py`. Consequently, installing that wheel does not provide the importable module; the usage above is for a source checkout, not an installed package.
 
-## API
+## Distribution names and limitations
 
-- WeightForge(hidden_size=256, num_layers=5, activation="silu",
-  distribution="fourier", chunk_size=32768): forge_weight, forge_layer,
-  forge_model, count_parameters, compression_ratio
-- Activations: silu, relu, gelu, tanh, sigmoid, elu, leaky_relu
-- Distributions: fourier, xavier, kaiming, normal, uniform
-- WeightForgeWrapper / WeightForgeConfig; create_weight_forge(...) factory
+The `distribution` option accepts `fourier`, `xavier`, `kaiming`, `normal`, and `uniform`, but these names should not be interpreted as implemented samplers for those statistical distributions. The implementation applies fixed scaling to the coordinate network's output for the Xavier, Kaiming, Normal, and Uniform options. The `fourier` option uses the network output without additional scaling; the code does not implement a Fourier-feature embedding.
 
-## Honest results and limitations
+Generated values come from a randomly initialized coordinate network and its coordinates, not from a fit to a target matrix. The repository contains no training or fitting procedure, trained-weight recovery, serialization/compression format, or controlled accuracy/reconstruction/compression benchmark. `forge_model()` only returns a name-to-tensor mapping; callers are responsible for any further use or assignment. Its compression ratio is parameter-count arithmetic and excludes storage overhead and encoding costs.
 
-- The ratio table (up to 10,000,000x) is parameter arithmetic only.
-- Generated matrices match the chosen distribution statistically, not
-  any trained target. Use this for initialization experiments, not for
-  storing or compressing trained models.
-- The xavier/kaiming/normal/uniform modes are simple scaled fills; the
-  coordinate MLP mostly matters in fourier mode. The non-Fourier modes
-  do not need a network at all - using the MLP for them is overhead.
-- No accuracy or reconstruction-error numbers are reported because none
-  were measured in a controlled experiment.
+## Tests
 
-## Negative results (from the source experiments)
-
-- The reserv.dean-part-2 log records that generated-weight
-  reconstructions of trained models were not usable without per-layer
-  fitting. The robust storage design kept in the toolkit is the
-  Reed-Solomon slot lattice (ECC-Memory).
+On the reviewed checkout (`44142d60c73d23af79ec87286bad6ef0900e2e2f`), `python -m pytest -q` completed with **29 passed**. The configured GitHub Actions workflow defines test runs on Python 3.10, 3.11, and 3.12; a remote workflow result was not checked for this draft.
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
+The repository includes an MIT License in [`LICENSE`](LICENSE), copyright 2026 Kapil Dhinwa. See that file for the license terms.
